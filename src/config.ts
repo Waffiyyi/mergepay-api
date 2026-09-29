@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { z } from "zod";
 import { Networks } from "@stellar/stellar-sdk";
+import { rateLimitConfigSchema } from "./config/env";
 
 // URL validation helper
 const urlSchema = z.string().url("Invalid URL format");
@@ -246,6 +247,11 @@ const schema = z.object({
   TX_TIMEOUT: z.coerce.number().int().positive().default(300000),
   MAX_RETRIES: z.coerce.number().int().nonnegative().default(3),
 
+  // Generic rate-limit defaults (see issue #408). Declared in src/config/env.ts
+  // so they can be unit-tested in isolation; merged into this schema so a
+  // malformed value aborts startup through this module's fail-fast
+  // process.exit(1) path instead of silently disabling the limiter.
+  ...rateLimitConfigSchema.shape,
   // Security-sensitive endpoint policies.
   RATE_LIMIT_STORE: z.enum(["memory", "database"]).default("memory"),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().max(MAX_RATE_LIMIT_WINDOW_MS).default(60000),
@@ -273,14 +279,14 @@ const schema = z.object({
   RATE_LIMIT_SETTLEMENT_CONFIRM_MAX: z.coerce.number().int().positive().max(100000).default(20),
   RATE_LIMIT_SETTLEMENT_CONFIRM_WINDOW_MS: z.coerce.number().int().positive().max(MAX_RATE_LIMIT_WINDOW_MS).default(60000),
   RATE_LIMIT_SETTLEMENT_EXECUTE_MAX: z.coerce.number().int().positive().max(100000).default(20),
-  RATE_LIMIT_SETTLEMENT_EXECUTE_WINDOW_MS: z.coerce.number().int().positive().default(60000),
+  RATE_LIMIT_SETTLEMENT_EXECUTE_WINDOW_MS: z.coerce.number().int().positive().max(MAX_RATE_LIMIT_WINDOW_MS).default(60000),
   // Expense creation writes an expense plus one share row per participant and
   // opens a settlement obligation, so it gets its own budget rather than
   // spending the caller's global allowance. It is looser than the settlement
   // policies because a legitimately active group creates expenses in bursts,
   // and it never shares a bucket with them.
   RATE_LIMIT_EXPENSE_CREATE_MAX: z.coerce.number().int().positive().max(100000).default(30),
-  RATE_LIMIT_EXPENSE_CREATE_WINDOW_MS: z.coerce.number().int().positive().default(60000),
+  RATE_LIMIT_EXPENSE_CREATE_WINDOW_MS: z.coerce.number().int().positive().max(MAX_RATE_LIMIT_WINDOW_MS).default(60000),
   SEP24_RATE_LIMIT_MAX: z.coerce.number().int().positive().max(100000).default(10),
   SEP24_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().max(MAX_RATE_LIMIT_WINDOW_MS).default(60000),
   RATE_LIMIT_GROUP: z.coerce.number().int().positive().max(100000).default(10),
