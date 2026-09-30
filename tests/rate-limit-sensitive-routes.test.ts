@@ -1264,4 +1264,3 @@ describe("sensitive authentication and payment endpoints rate limiting (#523)", 
     expect(authed.headers["x-ratelimit-remaining"]).toBe("0");
   });
 });
-
