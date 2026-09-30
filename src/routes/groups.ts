@@ -6,7 +6,7 @@ import { config } from "../config";
 import { Errors } from "../errors";
 import { requireUser } from "../plugins/auth";
 import { requireMembership, requireAdmin } from "../services/access";
-import { groupMembership, requireGroupRole } from "../plugins/group-access";
+import { groupMembership, requireGroupRole } from "../middleware";
 import { stellar } from "../services/stellar";
 import { inviteCode } from "../services/codes";
 import { auditGroupMemberActionTx, auditTx } from "../services/audit";
@@ -751,12 +751,14 @@ export default async function groupRoutes(app: FastifyInstance) {
       );
     }
 
-    // The lookup, the last-admin guard, the delete, and the audit record run
-    // in one transaction. Previously they did not: two concurrent removals
-    // could each see two admins and both proceed, leaving the group with
-    // none, and the audit write happened after the commit where a failure
-    // would lose the record of a removal that had already happened.
+    // The admin check, the target lookup, the last-admin guard, the delete,
+    // and the audit record all run in one transaction. Previously only the
+    // lookup onwards did: the `requireAdmin` call sat outside the transaction,
+    // so a caller demoted between their own check and the transaction could
+    // still land one last removal — the same race the role-change route below
+    // already closes for its own admin check.
     await prisma.$transaction(async (tx) => {
+      await requireAdmin(id, auth.id, tx);
       const target = await tx.groupMember.findUnique({
         where: { groupId_userId: { groupId: id, userId: memberId } },
       });
